@@ -377,6 +377,8 @@ export async function browserAutomationWorkflowEnhanced(
    - Check prerequisites are met (navigation complete, elements loaded)
    - Priority signals: execution plan > page context > user query
 
+**IMPORTANT: Respond in JSON format following the execution plan schema. All responses must be valid JSON.**
+
 3. **Tool Selection Rules**
    - **navigate**: Use ONLY for opening URLs (requires explicit URL)
    - **click**: Use for clicking elements (requires selector from page context)

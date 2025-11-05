@@ -154,7 +154,7 @@ export async function enhancedStreamingStep(
     const agentConfig: any = {
       model: input.model,
       instructions: input.system,
-      tools: input.tools,
+      tools: Object.values(input.tools || {}),
       toolChoice: 'required',
 
       experimental_reasoning: {
