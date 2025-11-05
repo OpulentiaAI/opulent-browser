@@ -7,6 +7,13 @@
 import { browserAutomationWorkflow } from './workflows/browser-automation-workflow.ts';
 import type { BrowserAutomationWorkflowInput, Message, PageContext } from './types.ts';
 
+// Mock Chrome APIs for Node.js environment
+(globalThis as any).chrome = {
+  runtime: {
+    getURL: () => 'chrome-extension://test/',
+  }
+};
+
 // Telemetry storage for analysis
 interface TelemetryData {
   timestamp: string;
@@ -26,6 +33,7 @@ interface TelemetryData {
     toolCallsCount: number;
     success: boolean;
     finalUrl: string;
+    authError?: string | null;
   };
   summarization: {
     success: boolean;
@@ -269,6 +277,22 @@ async function testProductionWorkflow() {
       console.log('=' .repeat(80));
     }
 
+    // Check for authentication-specific errors (401, auth failures)
+    const hasAuthError = result.error?.includes('401') || 
+                        result.error?.toLowerCase().includes('auth') || 
+                        result.error?.toLowerCase().includes('unauthorized') ||
+                        result.error?.toLowerCase().includes('credentials');
+
+    if (hasAuthError) {
+      console.log('❌ AUTHENTICATION ERROR DETECTED:');
+      console.log(`   Error: ${result.error}`);
+      telemetry.execution.authError = result.error;
+      telemetry.execution.success = false;
+    } else {
+      console.log('✅ No authentication errors detected');
+      telemetry.execution.authError = null;
+    }
+
     // Save telemetry data
     await saveTelemetryData(telemetry);
 
@@ -277,7 +301,19 @@ async function testProductionWorkflow() {
     telemetry.execution.totalDuration = duration;
     telemetry.execution.success = false;
     
-    console.error(`\n❌ Workflow failed after ${duration}ms:`, error);
+    // Check for authentication errors in catch block too
+    const authError = error?.message?.includes('401') || 
+                     error?.message?.toLowerCase().includes('auth') || 
+                     error?.message?.toLowerCase().includes('unauthorized') ||
+                     error?.message?.toLowerCase().includes('credentials');
+    
+    if (authError) {
+      console.log('❌ AUTHENTICATION ERROR DETECTED:');
+      console.log(`   Error: ${error.message}`);
+      telemetry.execution.authError = error.message;
+    } else {
+      console.log(`\n❌ Workflow failed after ${duration}ms:`, error);
+    }
     
     // Save error telemetry
     await saveTelemetryData(telemetry);
