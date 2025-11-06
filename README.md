@@ -1131,6 +1131,35 @@ This section recognizes the exceptional work that made our system possible.
 
 **Recognition**: To everyone advancing AI research through open collaboration—your work enables the next generation of intelligent systems. Opulent Browser demonstrates what's achievable when standing on the shoulders of giants.
 
+## Testing
+
+### Running E2E Tests with Real API Keys
+
+The project includes comprehensive end-to-end tests that validate the full workflow. By default, tests use fallback mode, but you can test with real AI responses:
+
+**Quick Start (2 minutes):**
+
+1. Get a free API key from [OpenRouter](https://openrouter.ai/keys) (no credit card needed)
+2. Set your key: `export OPENROUTER_API_KEY='sk-or-v1-your-key'`
+3. Run tests: `./run-e2e-with-api.sh`
+
+**What you'll see:**
+- ✅ Real model generates execution plans
+- ✅ Actual streaming AI responses
+- ✅ Full workflow telemetry captured
+- ✅ End-to-end validation of all integrations
+
+**Documentation:**
+- 📖 [Quick Start Guide](./QUICK-START-REAL-API.md) - 2-minute setup
+- 📖 [Full Testing Guide](./TESTING-WITH-REAL-API.md) - All providers, troubleshooting, security
+
+**Free models available:**
+- `google/gemini-2.0-flash-exp:free` (default)
+- `google/gemini-flash-1.5:free`
+- `meta-llama/llama-3.2-3b-instruct:free`
+
+Perfect for testing without costs!
+
 ## License
 
 Proprietary software. All rights reserved.

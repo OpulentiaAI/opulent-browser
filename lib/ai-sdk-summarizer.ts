@@ -3,6 +3,7 @@
 
 import { generateText, streamText, tool, NoSuchToolError, generateObject } from 'ai';
 import { z } from 'zod';
+import { stepCountIs } from './ai-sdk-6-tools-types';
 
 const LOG_PREFIX = '🤖 [AI-SDK-SUMMARIZER]';
 

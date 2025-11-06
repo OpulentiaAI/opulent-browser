@@ -1,0 +1,155 @@
+[2025-11-06T03:14:42.828Z] 📝 Test log file initialized
+[2025-11-06T03:14:42.829Z] 🚀 Setting up Chrome browser for testing...
+[2025-11-06T03:14:44.926Z] ✅ Browser launched successfully
+[2025-11-06T03:14:45.059Z] 🆔 Extension ID resolved: jedilbhgpkglfcofmhhpcjnklnnjmdog
+[2025-11-06T03:14:45.068Z] 
+================================================================================
+[2025-11-06T03:14:45.069Z] 🧪 STARTING TEST: Basic Navigation with Telemetry
+[2025-11-06T03:14:45.069Z] ================================================================================
+[2025-11-06T03:14:45.876Z] ⚙️ Configuring default Atlas settings for test environment...
+[2025-11-06T03:14:45.876Z] ✅ Using openrouter API key from environment: s-or-v1a10...
+[2025-11-06T03:14:45.876Z] ✅ Using model: z-ai/glm-4.5-air:free
+[2025-11-06T03:14:46.066Z] 📄 Sidepanel page URL: chrome-extension://jedilbhgpkglfcofmhhpcjnklnnjmdog/sidepanel.html
+[2025-11-06T03:14:46.066Z] ✅ Sidepanel page loaded
+[2025-11-06T03:14:46.068Z] 🔧 Checking if browser tools are enabled...
+[2025-11-06T03:14:46.090Z] 🔘 Browser tools button found: ◉
+[2025-11-06T03:14:46.091Z] 📝 Sending navigation command...
+[2025-11-06T03:14:46.093Z] 🔍 Found prompt input via selector: textarea[aria-label="Prompt input"]
+[2025-11-06T03:14:47.035Z] ✅ Typed "go to google.com" into input
+[2025-11-06T03:14:47.038Z] 📤 Submitting command...
+[2025-11-06T03:14:47.057Z] [SIDEPANEL-CONSOLE] 📝 [PromptComposer] Submitting prompt {
+  "length": 16,
+  "files": 0
+}
+[2025-11-06T03:14:47.058Z] [SIDEPANEL-CONSOLE] 🔧 [handleSubmit] Browser tools MANDATORY - using engine JSHandle@object
+[2025-11-06T03:14:47.060Z] [SIDEPANEL-CONSOLE] 🚀 [handleSubmit] Using Gateway Computer Use workflow
+[2025-11-06T03:14:47.062Z] ✅ Clicked submit button
+[2025-11-06T03:14:47.062Z] ⏳ Waiting for navigation to complete...
+[2025-11-06T03:14:47.063Z] [SIDEPANEL-CONSOLE] 🚀 [Gateway Computer Use] Starting browser automation workflow
+[2025-11-06T03:14:47.064Z] [SIDEPANEL-CONSOLE] 🚀 [Gateway Computer Use] User query: go to google.com
+[2025-11-06T03:14:47.064Z] [SIDEPANEL-CONSOLE] 🚀 [Gateway Computer Use] Settings: {
+  "provider": "openrouter",
+  "model": "z-ai/glm-4.5-air:free",
+  "hasBraintrust": false,
+  "hasYouApi": true
+}
+[2025-11-06T03:14:47.066Z] [SIDEPANEL-CONSOLE] 🔧 [trackToolExecution] getPageContext (output-available): JSHandle@object
+[2025-11-06T03:14:47.068Z] [SIDEPANEL-CONSOLE] ✅ [executeTool] getPageContext completed in 1ms
+[2025-11-06T03:14:47.069Z] [SIDEPANEL-CONSOLE] 🌐 [Gateway Computer Use] Initial page context retrieved, URL: chrome-extension://jedilbhgpkglfcofmhhpcjnklnnjmdog/sidepanel.html
+[2025-11-06T03:14:47.253Z] [SIDEPANEL-CONSOLE] 
+================================================================================
+[2025-11-06T03:14:47.254Z] [SIDEPANEL-CONSOLE] 🔍 PREFLIGHT VALIDATION
+[2025-11-06T03:14:47.255Z] [SIDEPANEL-CONSOLE] ================================================================================
+[2025-11-06T03:14:47.375Z] [SIDEPANEL-CONSOLE] 
+🔍 [PREFLIGHT] ✅ Preflight check passed - All critical environment variables present
+
+[2025-11-06T03:14:47.377Z] [SIDEPANEL-CONSOLE] 🔍 [PREFLIGHT] Warnings:
+[2025-11-06T03:14:47.380Z] [SIDEPANEL-CONSOLE] 🔍 [PREFLIGHT]   ⚠️  OPENAI_API_KEY not set (optional)
+[2025-11-06T03:14:47.386Z] [SIDEPANEL-CONSOLE] 🔍 [PREFLIGHT]   ⚠️  GATEWAY_API_KEY not set (optional)
+[2025-11-06T03:14:47.396Z] [SIDEPANEL-CONSOLE] 🔍 [PREFLIGHT]   ⚠️  ANTHROPIC_API_KEY not set (optional)
+[2025-11-06T03:14:47.400Z] [SIDEPANEL-CONSOLE] 🔍 [PREFLIGHT]   ⚠️  BRAINTRUST_API_KEY not set (optional)
+[2025-11-06T03:14:47.495Z] [SIDEPANEL-CONSOLE] 
+[2025-11-06T03:14:47.495Z] [SIDEPANEL-CONSOLE] ================================================================================
+
+[2025-11-06T03:14:47.499Z] [SIDEPANEL-CONSOLE] 🔍 🔄 [WORKFLOW] ⏱️ Starting: Enhanced Workflow Execution
+[2025-11-06T03:14:47.500Z] [SIDEPANEL-CONSOLE] 📋 🔄 [WORKFLOW] Starting enhanced browser automation workflow
+[2025-11-06T03:14:47.525Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:47.536Z] [SIDEPANEL-CONSOLE] 🔍 🧠 [PLANNING] ⏱️ Starting: Planning Step
+[2025-11-06T03:14:47.536Z] [SIDEPANEL-CONSOLE] 📋 🧠 [PLANNING] Starting planning step
+[2025-11-06T03:14:47.549Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:47.550Z] [SIDEPANEL-CONSOLE] 🔍 🧠 [PLANNING] Loading planning utilities
+[2025-11-06T03:14:47.574Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:47.658Z] [SIDEPANEL-CONSOLE] 🔍 🧠 [PLANNING] Calling planning function
+[2025-11-06T03:14:47.661Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:47.668Z] [SIDEPANEL-CONSOLE] 🔍 🧠 [PLANNING] Calling generateExecutionPlanWithTelemetryCached
+[2025-11-06T03:14:47.687Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:47.688Z] [SIDEPANEL-CONSOLE] 🔧 [trackToolExecution] getPageContext (output-available): JSHandle@object
+[2025-11-06T03:14:47.689Z] [SIDEPANEL-CONSOLE] ✅ [executeTool] getPageContext completed in 207ms
+[2025-11-06T03:14:47.955Z] [SIDEPANEL-CONSOLE] [AGENTIC-TELEMETRY] Starting streaming with intent: go to google.com
+[2025-11-06T03:14:47.966Z] [SIDEPANEL-CONSOLE] [TELEMETRY] agentic_streaming_start: {"user_intent":"go to google.com","expected_tool":"navigate","retry_count":0,"message_count":1}
+[2025-11-06T03:14:47.971Z] [SIDEPANEL-CONSOLE] 🔍 📡 [STREAMING] ⏱️ Starting: Enhanced Streaming Step
+[2025-11-06T03:14:47.971Z] [SIDEPANEL-CONSOLE] 📋 📡 [STREAMING] Starting enhanced streaming step
+[2025-11-06T03:14:48.010Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:48.011Z] [SIDEPANEL-CONSOLE] 🔍 📡 [STREAMING] Calling enhanced agent.stream()
+[2025-11-06T03:14:48.031Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:48.034Z] [SIDEPANEL-CONSOLE] 🔍 🤖 [AGENT] ⏱️ Starting: Enhanced Agent Stream
+[2025-11-06T03:14:48.039Z] [SIDEPANEL-CONSOLE] 🔍 🤖 [AGENT] ⏱️ Completed: Enhanced Agent Stream (2ms)
+[2025-11-06T03:14:48.046Z] [SIDEPANEL-CONSOLE] 📋 📡 [STREAMING] Enhanced agent stream initialized
+[2025-11-06T03:14:48.047Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:48.064Z] [SIDEPANEL-CONSOLE] Failed to load resource: the server responded with a status of 401 ()
+[2025-11-06T03:14:48.068Z] [SIDEPANEL-CONSOLE] JSHandle@error
+[2025-11-06T03:14:48.069Z] [SIDEPANEL-CONSOLE] [TELEMETRY] agentic_streaming_failure: {"user_intent":"go to google.com","expected_tool":"navigate","error_name":"AI_NoOutputGeneratedError","error_message":"No output generated. Check the stream for errors.","is_no_output_error":true,"retry_count":0}
+[2025-11-06T03:14:48.069Z] [SIDEPANEL-CONSOLE] [AGENTIC-TELEMETRY] Streaming failed: JSHandle@object
+[2025-11-06T03:14:48.071Z] [SIDEPANEL-CONSOLE] ⚠️ 🔄 [WORKFLOW] Model returned no output, generating fallback summary
+[2025-11-06T03:14:48.073Z] [SIDEPANEL-CONSOLE]    Data: JSHandle@object
+[2025-11-06T03:14:48.074Z] [SIDEPANEL-CONSOLE] ✅ [Fallback] SUCCESS: Provided fallback summary for workflow.
+[2025-11-06T03:14:48.075Z] [SIDEPANEL-CONSOLE] Final summary (fallback) generated for review.
+[2025-11-06T03:14:48.079Z] [SIDEPANEL-CONSOLE] ✅ [Summarization] Skipped AI summarizer due to fallback response.
+[2025-11-06T03:14:48.089Z] [SIDEPANEL-CONSOLE] 🔍 🔄 [WORKFLOW] ⏱️ Completed: Enhanced Workflow Execution (501ms)
+[2025-11-06T03:14:48.110Z] [SIDEPANEL-CONSOLE] 🏁 [Gateway Computer Use] Workflow completed: JSHandle@object
+[2025-11-06T03:14:48.127Z] [SIDEPANEL-CONSOLE] ⚠️ [Gateway Computer Use] Summarization failed or missing JSHandle@object
+[2025-11-06T03:14:48.130Z] [SIDEPANEL-CONSOLE] ⚠️ [Fallback] Suppressed unhandled rejection: No output generated. Check the stream for errors.
+[2025-11-06T03:14:48.131Z] [SIDEPANEL-CONSOLE] ⚠️ [Fallback] Suppressed unhandled rejection: No output generated. Check the stream for errors.
+[2025-11-06T03:14:48.136Z] [SIDEPANEL-CONSOLE] 🎨 [UI] Rendering summary message: JSHandle@object
+[2025-11-06T03:14:48.146Z] [SIDEPANEL-CONSOLE] 🎯 [UI] Ensuring summary message is visible
+[2025-11-06T03:14:52.063Z] 📊 Checking for telemetry logs...
+[2025-11-06T03:14:52.064Z] 📈 Found 2 telemetry entries
+[2025-11-06T03:14:52.064Z]    [SIDEPANEL] [TELEMETRY] agentic_streaming_start: {"user_intent":"go to google.com","expected_tool":"navigate","retry_count":0,"message_count":1}
+[2025-11-06T03:14:52.064Z]    [SIDEPANEL] [TELEMETRY] agentic_streaming_failure: {"user_intent":"go to google.com","expected_tool":"navigate","error_name":"AI_NoOutputGeneratedError","error_message":"No output generated. Check the stream for errors.","is_no_output_error":true,"retry_count":0}
+[2025-11-06T03:14:52.064Z] ✅ Success indicators: 4
+[2025-11-06T03:14:52.064Z] ❌ Error indicators: 0
+[2025-11-06T03:14:52.064Z] 🎯 Tool Selection Events: 0
+[2025-11-06T03:14:52.064Z] ⚙️  Parameter Quality Events: 0
+[2025-11-06T03:14:52.064Z] 🧠 Awareness Events: 0
+[2025-11-06T03:14:52.064Z] 🔄 Iteration Events: 0
+[2025-11-06T03:14:52.064Z] 💬 Context Usage Events: 0
+[2025-11-06T03:14:52.064Z] ❌ Test failed with error: Should validate tool selection
+[2025-11-06T03:14:52.064Z] 
+================================================================================
+[2025-11-06T03:14:52.064Z] ✅ TEST COMPLETED: Basic Navigation with Telemetry
+[2025-11-06T03:14:52.064Z]    Status: FAIL
+[2025-11-06T03:14:52.064Z]    Duration: 6996ms
+[2025-11-06T03:14:52.064Z]    Logs: 61 entries
+[2025-11-06T03:14:52.064Z]    Errors: 1 entries
+[2025-11-06T03:14:52.064Z] ================================================================================
+[2025-11-06T03:14:52.065Z] 
+================================================================================
+[2025-11-06T03:14:52.065Z] 🧪 STARTING TEST: Telemetry Data Retrieval
+[2025-11-06T03:14:52.065Z] ================================================================================
+[2025-11-06T03:14:52.067Z] 📄 Sidepanel page URL: chrome-extension://jedilbhgpkglfcofmhhpcjnklnnjmdog/sidepanel.html
+[2025-11-06T03:14:52.067Z] 📊 Attempting to retrieve telemetry data...
+[2025-11-06T03:14:52.075Z] 📈 Telemetry data retrieved: {
+  "telemetry": {
+    "events": [],
+    "stats": {
+      "totalNavigations": 0,
+      "successfulNavigations": 0,
+      "failedNavigations": 0,
+      "averageDuration": 0
+    }
+  }
+}
+[2025-11-06T03:14:52.075Z] 
+================================================================================
+[2025-11-06T03:14:52.075Z] ✅ TEST COMPLETED: Telemetry Data Retrieval
+[2025-11-06T03:14:52.076Z]    Status: PASS
+[2025-11-06T03:14:52.076Z]    Duration: 10ms
+[2025-11-06T03:14:52.076Z]    Logs: 1 entries
+[2025-11-06T03:14:52.076Z]    Errors: 0 entries
+[2025-11-06T03:14:52.076Z] ================================================================================
+[2025-11-06T03:14:52.076Z] 
+🔚 Closing browser...
+[2025-11-06T03:14:52.489Z] 
+================================================================================
+[2025-11-06T03:14:52.489Z] 📊 FINAL TEST SUMMARY
+[2025-11-06T03:14:52.489Z] ================================================================================
+[2025-11-06T03:14:52.489Z] ✅ Passed: 1/2
+[2025-11-06T03:14:52.489Z] ❌ Failed: 1/2
+[2025-11-06T03:14:52.489Z] ⏱️  Total Duration: 7006ms
+[2025-11-06T03:14:52.490Z]    ❌ Basic Navigation with Telemetry (6996ms)
+[2025-11-06T03:14:52.490Z]       Errors: 1
+[2025-11-06T03:14:52.490Z]         [TEST-ERROR] Should validate tool selection
+[2025-11-06T03:14:52.490Z]    ✅ Telemetry Data Retrieval (10ms)
+[2025-11-06T03:14:52.490Z] ================================================================================
+[2025-11-06T03:14:52.490Z] 📝 Full logs saved to: /Users/jeremyalston/Downloads/Component paradise/open-chatgpt-atlas-master/tests/e2e-test-logs.txt
+[2025-11-06T03:14:52.490Z] ================================================================================

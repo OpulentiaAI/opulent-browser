@@ -62,7 +62,14 @@ export function ApprovalModal({
   onReject,
   autoCloseOnAction = true,
 }: ApprovalModalProps) {
+  const closeReasonRef = React.useRef<'approve' | 'reject' | null>(null);
+
+  React.useEffect(() => {
+    closeReasonRef.current = null;
+  }, [open]);
+
   const handleApprove = () => {
+    closeReasonRef.current = 'approve';
     onApprove();
     if (autoCloseOnAction) {
       onOpenChange(false);
@@ -70,10 +77,23 @@ export function ApprovalModal({
   };
 
   const handleReject = () => {
+    closeReasonRef.current = 'reject';
     onReject();
     if (autoCloseOnAction) {
       onOpenChange(false);
     }
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      if (closeReasonRef.current === null) {
+        onReject();
+      }
+      onOpenChange(false);
+    } else {
+      onOpenChange(true);
+    }
+    closeReasonRef.current = null;
   };
 
   const getRiskColor = (level: string = 'medium') => {
@@ -105,7 +125,7 @@ export function ApprovalModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

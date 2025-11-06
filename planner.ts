@@ -86,20 +86,18 @@ export async function generateExecutionPlan(
       console.log('✅ [Planner] Provider client created successfully');
     } else if (opts.provider === 'openrouter') {
       console.log('🔑 [Planner] Creating OpenRouter client...');
-      const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
+      const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
       if (!opts.apiKey) {
         throw new Error('OpenRouter API key is required for planning');
       }
-      const client = createOpenAICompatible({
-        name: 'openrouter',
-        baseURL: 'https://openrouter.ai/api/v1',
+      const client = createOpenRouter({
+        apiKey: opts.apiKey,
         headers: {
           'HTTP-Referer': 'https://opulentia.ai',
           'X-Title': 'Opulent Browser',
         },
-        apiKey: opts.apiKey,
       });
-      model = client.chatModel(opts.model || 'minimax/minimax-m2');
+      model = client.chat(opts.model || 'minimax/minimax-m2');
       console.log('✅ [Planner] OpenRouter client created successfully');
     } else {
       console.log('🔑 [Planner] Creating Google Generative AI client...');

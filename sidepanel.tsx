@@ -10,7 +10,7 @@ if (typeof globalThis !== 'undefined' && !globalThis.__name) {
 import { createRoot } from 'react-dom/client';
 import { Streamdown } from 'streamdown';
 import './app.css'; // Import GT America fonts and OKLCH theme
-import type { Settings, MCPClient, Message, PageContext } from './types';
+import type { Settings, MCPClient, PageContext, Message } from './types';
 import { GeminiResponseSchema } from './types';
 import { stepCountIs } from 'ai';
 import { initializeBraintrust } from './lib/braintrust';
@@ -27,6 +27,7 @@ import { ReasoningChatForm } from './components/reasoning-chat-form';
 import { Reasoning, ReasoningTrigger, ReasoningContent } from './components/ai-elements/reasoning';
 import { Response } from './components/ai-elements/response';
 import { cn } from './lib/utils';
+import { ApprovalModal, type ToolApprovalRequest } from './components/ui/approval-modal';
 // Enhanced chat elements with improved styling
 import { 
   Conversation,
@@ -34,28 +35,12 @@ import {
   ConversationScrollButton,
 } from './components/ai-elements/conversation';
 import { buildFinalSummaryMessage } from './lib/message-utils';
-import { 
-  Message, 
-  MessageContent 
-} from './components/ai-elements/message';
 import {
-  PromptInput,
-  PromptInputTextarea,
-  PromptInputFooter,
-  PromptInputTools,
-  PromptInputButton,
-  PromptInputModelSelect,
-  PromptInputModelSelectContent,
-  PromptInputModelSelectItem,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectValue,
-} from './components/ai-elements/prompt-input';
-import { 
-  EnhancedPlanDisplay, 
-  EnhancedToolCallDisplay, 
-  JSONDisplay,
-  StructuredOutput 
-} from './components/ui/structured-output';
+  Message as MessageComponent,
+  MessageContent,
+} from './components/ai-elements/message';
+import { EnhancedToolCallDisplay } from './components/ui/structured-output';
+import { WorkflowTaskList } from './components/ui/workflow-task-list';
 import { Button } from './components/ui/button';
 import { Send } from 'lucide-react';
 import { useStickToBottomContext } from 'use-stick-to-bottom';
@@ -65,45 +50,42 @@ import {
   ErrorAnalysisArtifact,
   ExecutionTrajectoryArtifact,
   WorkflowMetadataArtifact,
-  WorkflowOutputArtifact,
 } from './components/ui/artifact-views';
-import { WorkflowQueue } from './components/ui/workflow-queue';
-import { WorkflowTaskList } from './components/ui/workflow-task-list';
-import { CodeBlock, CodeBlockCopyButton } from './components/ui/code-block';
-import { PageContext } from './types';
 
-// Custom component to handle link clicks - opens in new tab
-const LinkComponent = ({ href, children }: { href?: string; children?: React.ReactNode }) => {
-  const handleLinkClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
-      chrome.tabs.create({ url: href });
+// Suppress noisy unhandled errors coming from provider fallbacks (e.g., AI_NoOutputGeneratedError)
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason: any = event?.reason;
+    const message = typeof reason?.message === 'string' ? reason.message : String(reason || '');
+    const name = typeof reason?.name === 'string' ? reason.name : '';
+    if (name === 'AI_NoOutputGeneratedError' || /no output generated/i.test(message)) {
+      console.warn('⚠️ [Fallback] Suppressed unhandled rejection:', message);
+      event.preventDefault();
     }
-  };
+  });
 
-  return (
-    <a
-      href={href}
-      onClick={handleLinkClick}
-      style={{ color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
-      title={href}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {children}
-    </a>
-  );
-};
+  window.addEventListener('error', (event) => {
+    const name = event?.error?.name || '';
+    const message = event?.message || '';
+    if (name === 'AI_NoOutputGeneratedError' || /no output generated/i.test(message)) {
+      console.warn('⚠️ [Fallback] Suppressed page error:', message);
+      event.preventDefault();
+    }
+  });
+}
 
 // AI Elements Response primitive is used for message content display
 // It uses Streamdown internally with proper memoization and streaming support
 
 function ChatSidebar() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [viewMode, setViewMode] = useState<'standard' | 'reasoning'>('standard');
+  
+  // Approval flow state
+  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [currentApproval, setCurrentApproval] = useState<ToolApprovalRequest | null>(null);
+  const [approvalResolver, setApprovalResolver] = useState<((approved: boolean) => void) | null>(null);
   
   // Use @ai-sdk-tools/store for high-performance message management
   // Store works with message-like structures - we'll use type assertion for compatibility
@@ -116,12 +98,45 @@ function ChatSidebar() {
   const updateLastMessage = (updater: (msg: Message) => Message) => {
     const currentMessages = Array.isArray(messages) ? messages : [];
     if (currentMessages.length === 0) return;
-    const lastMsg = currentMessages[currentMessages.length - 1];
-    if (lastMsg) {
-      replaceMessageById(lastMsg.id, updater(lastMsg));
-    }
+    
+    const lastMessage = currentMessages[currentMessages.length - 1];
+    const updatedMessage = updater(lastMessage);
+    replaceMessageById(lastMessage.id, updatedMessage);
   };
-  
+
+  // Approval handler that returns a Promise - this will pause execution until user responds
+  const handleApprovalRequired = async (toolName: string, args: any): Promise<boolean> => {
+    return new Promise((resolve) => {
+      setCurrentApproval({
+        toolCallId: `approval_${Date.now()}`,
+        toolName,
+        args,
+        reason: `The AI agent wants to execute ${toolName} with the specified parameters.`,
+        riskLevel: toolName === 'navigate' ? 'medium' : 'low',
+      });
+      setApprovalResolver(() => resolve);
+      setApprovalModalOpen(true);
+    });
+  };
+
+  const handleApprove = () => {
+    if (approvalResolver) {
+      approvalResolver(true);
+      setApprovalResolver(null);
+    }
+    setApprovalModalOpen(false);
+    setCurrentApproval(null);
+  };
+
+  const handleReject = () => {
+    if (approvalResolver) {
+      approvalResolver(false);
+      setApprovalResolver(null);
+    }
+    setApprovalModalOpen(false);
+    setCurrentApproval(null);
+  };
+
   // Helper function to append text to last message
   const appendToLastMessage = (text: string) => {
     updateLastMessage((msg) => ({ ...msg, content: msg.content + text }));
@@ -174,7 +189,7 @@ function ChatSidebar() {
     };
 
     const TOOL_TIMEOUT = TOOL_TIMEOUTS[toolName] || 8000;
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     // Track tool execution start across try/catch
     const executionStartTime = Date.now();
     
@@ -873,7 +888,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
         
         // Create abort controller with timeout
         const abortController = new AbortController();
-        const timeoutId = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
+        const executionTimeoutId = setTimeout(() => abortController.abort(), 60000); // 60 second timeout
         
         // Always use computer-use model for browser tools
         const computerUseModel = 'gemini-2.5-computer-use-preview-10-2025';
@@ -1448,17 +1463,15 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
           throw new Error('OpenRouter API key is required. Please set it in settings.');
         }
         console.log('🔑 [streamWithAISDKAndMCP] Creating OpenRouter client with key:', settings.apiKey.substring(0, 10) + '...');
-        const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
-        const openRouterClient = createOpenAICompatible({
-          name: 'openrouter',
-          baseURL: 'https://openrouter.ai/api/v1',
+        const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
+        const openRouterClient = createOpenRouter({
+          apiKey: settings.apiKey,
           headers: {
             'HTTP-Referer': chrome.runtime.getURL(''),
             'X-Title': 'Opulent Browser',
           },
-          apiKey: settings.apiKey,
         });
-        model = openRouterClient.chatModel(settings.model);
+        model = openRouterClient.chat(settings.model);
         console.log('✅ [streamWithAISDKAndMCP] OpenRouter client created for model:', settings.model);
       } else if (settings!.provider === 'nim') {
         if (!settings?.apiKey) {
@@ -1703,14 +1716,15 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
           settings: workflowInput.settings,
           messages,
           abortSignal: abortControllerRef.current?.signal,
+          onApprovalRequired: handleApprovalRequired,
         });
         
         // Log workflow completion
         console.log(`🏁 [Gateway Computer Use] Workflow completed:`, {
           success: workflowOutput.success,
-          totalDuration: workflowOutput.totalDuration,
-          finalUrl: workflowOutput.finalUrl,
-          steps: workflowOutput.executionTrajectory.length,
+          totalDuration: workflowOutput.duration,
+          finalUrl: workflowOutput.streaming?.executionSteps?.slice(-1)[0]?.url || null,
+          steps: workflowOutput.streaming?.executionSteps?.length || 0,
           workflowId: workflowOutput.metadata?.workflowId,
           hasSummarization: !!workflowOutput.summarization,
           summaryLength: workflowOutput.summarization?.summary?.length || 0,
@@ -1924,17 +1938,15 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
           throw new Error('OpenRouter API key is required. Please set it in settings.');
         }
         console.log('🔑 [streamWithAISDK] Creating OpenRouter client with key:', settings.apiKey.substring(0, 10) + '...');
-        const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
-        const openRouterClient = createOpenAICompatible({
-          name: 'openrouter',
-          baseURL: 'https://openrouter.ai/api/v1',
+        const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
+        const openRouterClient = createOpenRouter({
+          apiKey: settings.apiKey,
           headers: {
             'HTTP-Referer': chrome.runtime.getURL(''),
             'X-Title': 'Opulent Browser',
           },
-          apiKey: settings.apiKey,
         });
-        model = openRouterClient.chatModel(settings.model);
+        model = openRouterClient.chat(settings.model);
         console.log('✅ [streamWithAISDK] OpenRouter client created for model:', settings.model);
       } else if (settings!.provider === 'nim') {
         if (!settings?.apiKey) {
@@ -2142,6 +2154,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
               <h1 className="text-lg font-semibold text-foreground">Opulent</h1>
               <p style={{ marginBottom: '20px' }}>Please configure your AI provider to get started.</p>
               <button
+                type="button"
                 onClick={openSettings}
                 className="settings-icon-btn"
                 style={{ width: 'auto', padding: '12px 24px' }}
@@ -2169,6 +2182,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button
+              type="button"
               onClick={toggleBrowserTools}
               className="settings-icon-btn transition-all duration-200 hover:scale-105 active"
               title="Browser Tools (Always Enabled)"
@@ -2251,7 +2265,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
                         key={message.id}
                         className="mx-auto w-full max-w-4xl animate-in fade-in slide-in-from-bottom-1 duration-200 py-2"
                       >
-                        <Message from={message.role as "user" | "assistant"}>
+                        <MessageComponent from={message.role as "user" | "assistant"}>
                           <MessageContent
                             className={cn(
                               message.role === 'user' 
@@ -2305,7 +2319,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
                                           <ReasoningContent className="space-y-2 pt-3">
                                             {message.reasoning.map((thought, idx) => (
                                               <div 
-                                                key={idx}
+                                                key={`thought-${idx}`}
                                                 className="rounded-md bg-muted/50 p-3 text-sm text-muted-foreground"
                                               >
                                                 <div className="font-medium text-foreground mb-1">
@@ -2453,7 +2467,7 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
                               </div>
                             )}
                           </MessageContent>
-                        </Message>
+                        </MessageComponent>
                       </div>
                     );
                   })}
@@ -2503,6 +2517,17 @@ ${preSearchBlock ? preSearchBlock + '\n' : ''}${evaluationBlock ? evaluationBloc
         <AIDevtools
           modelId={browserToolsEnabled ? getComputerUseLabel() : (settings?.model || 'unknown')}
           debug={false}
+        />
+      )}
+      
+      {/* Approval Modal for tool execution */}
+      {currentApproval && (
+        <ApprovalModal
+          open={approvalModalOpen}
+          onOpenChange={setApprovalModalOpen}
+          approval={currentApproval}
+          onApprove={handleApprove}
+          onReject={handleReject}
         />
       )}
     </div>

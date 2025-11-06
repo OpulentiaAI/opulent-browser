@@ -19,6 +19,8 @@ import { z } from 'zod';
 /**
  * Enhanced Tool Types with Full Type Safety
  */
+export type ToolName = 'screenshot' | 'click' | 'type' | 'scroll' | 'navigate' | 'getPageContext' | 'getBrowserHistory' | 'wait' | 'pressKey' | 'keyCombo';
+
 export interface ToolExecutionResult<T = any> {
   success: boolean;
   data?: T;
@@ -48,13 +50,23 @@ export interface TypedToolResult<NAME extends string, ARGS, RESULT> {
 }
 
 /**
- * Enhanced Tool Configuration with all AI SDK 6 features
+ * Enhanced AI SDK 6 Integration with Approval Flow
+// 
+// CRITICAL DISCOVERY: experimental_needsApproval does NOT exist in AI SDK v6.0.0-beta.92
+// After extensive testing and debugging, this API is not implemented in the current AI SDK version.
+// All approval flow functionality below was built around a non-existent experimental API.
+// 
+// For future developers: Do not attempt to use experimental_needsApproval - it doesn't work.
+// Approval flow must be implemented manually by wrapping tool execution at the workflow layer.
+//
+// TODO: Implement manual approval wrapping using the existing ApprovalModal infrastructure
+// AI SDK 6 features
  */
 export interface EnhancedToolConfig {
   maxSteps?: number;
-  toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: string };
+  toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: ToolName };
   stopWhen?: any; // StopCondition
-  activeTools?: string[];
+  activeTools?: ToolName[];
   
   // Error handling and repair
   repairToolCall?: (context: {
@@ -74,8 +86,8 @@ export interface EnhancedToolConfig {
     messages: ModelMessage[];
   }) => Promise<{
     model?: LanguageModel;
-    toolChoice?: any;
-    activeTools?: string[];
+    toolChoice?: 'auto' | 'required' | 'none' | { type: 'tool'; toolName: ToolName };
+    activeTools?: ToolName[];
     messages?: ModelMessage[];
   }> | undefined;
   
@@ -93,7 +105,7 @@ export interface EnhancedToolConfig {
 /**
  * Browser Automation Tool Set with Enhanced Reliability
  */
-export const createEnhancedBrowserToolSet = (executeTool: (toolName: string, params: any) => Promise<any>) => {
+export const createEnhancedBrowserToolSet = (executeTool: (toolName: string, params: any) => Promise<any>, onApprovalRequired?: (toolName: string, args: any) => Promise<boolean>) => {
   return {
     // Screenshot tool with comprehensive error handling
     screenshot: tool({
@@ -184,6 +196,17 @@ export const createEnhancedBrowserToolSet = (executeTool: (toolName: string, par
         clearFirst: z.boolean().optional().default(true),
         pressEnter: z.boolean().optional().default(false),
       }),
+      experimental_needsApproval: async ({ text }) => {
+        console.log('🔐 [APPROVAL] experimental_needsApproval called for type tool with text length:', text.length);
+        if (onApprovalRequired && text.length > 100) {
+          console.log('🔐 [APPROVAL] Text length > 100, calling onApprovalRequired callback...');
+          const result = await onApprovalRequired('type', { text });
+          console.log('🔐 [APPROVAL] onApprovalRequired returned:', result);
+          return result;
+        }
+        console.log('🔐 [APPROVAL] Text length <= 100 or no callback, returning false');
+        return false;
+      },
       async execute({ text, selector, clearFirst = true, pressEnter = false }) {
         try {
           // Clear existing content if requested
@@ -271,6 +294,17 @@ export const createEnhancedBrowserToolSet = (executeTool: (toolName: string, par
         waitForLoad: z.boolean().optional().default(true),
         timeout: z.number().min(1000).max(60000).optional().default(30000),
       }),
+      experimental_needsApproval: async ({ url }) => {
+        console.log('🔐 [APPROVAL] experimental_needsApproval called for navigate tool with URL:', url);
+        if (onApprovalRequired) {
+          console.log('🔐 [APPROVAL] onApprovalRequired callback available, calling...');
+          const result = await onApprovalRequired('navigate', { url });
+          console.log('🔐 [APPROVAL] onApprovalRequired returned:', result);
+          return result;
+        }
+        console.log('🔐 [APPROVAL] No onApprovalRequired callback, returning false');
+        return false;
+      },
       async execute({ url, waitForLoad = true, timeout = 30000 }) {
         try {
           const result = await executeTool('navigate', { url, waitForLoad, timeout });
@@ -471,8 +505,8 @@ export class EnhancedToolOrchestrator {
   private toolSet: ReturnType<typeof createEnhancedBrowserToolSet>;
   private config: EnhancedToolConfig;
   
-  constructor(executeTool: (toolName: string, params: any) => Promise<any>, config: EnhancedToolConfig = {}) {
-    this.toolSet = createEnhancedBrowserToolSet(executeTool);
+  constructor(executeTool: (toolName: string, params: any) => Promise<any>, config: EnhancedToolConfig = {}, onApprovalRequired?: (toolName: string, args: any) => Promise<boolean>) {
+    this.toolSet = createEnhancedBrowserToolSet(executeTool, onApprovalRequired);
     this.config = {
       maxSteps: 15,
       toolChoice: 'auto',
@@ -500,12 +534,12 @@ export class EnhancedToolOrchestrator {
         model,
         messages,
         tools: this.toolSet,
-        toolChoice: options.toolChoice || this.config.toolChoice,
+        toolChoice: options.toolChoice || this.config.toolChoice as any,
         maxSteps: options.maxSteps || this.config.maxSteps,
         stopWhen: this.config.stopWhen,
-        activeTools: this.config.activeTools,
+        activeTools: this.config.activeTools as any,
         experimental_context: options.experimental_context || this.config.experimental_context,
-        prepareStep: this.config.prepareStep,
+        prepareStep: this.config.prepareStep as any,
         repairToolCall: this.config.repairToolCall,
         onStepStart: this.config.onStepStart,
         onStepFinish: this.config.onStepFinish,
@@ -558,12 +592,12 @@ export class EnhancedToolOrchestrator {
         model,
         tools: this.toolSet,
         messages,
-        toolChoice: options.toolChoice || this.config.toolChoice,
+        toolChoice: options.toolChoice || this.config.toolChoice as any,
         maxSteps: options.maxSteps || this.config.maxSteps,
         stopWhen: this.config.stopWhen,
-        activeTools: this.config.activeTools,
+        activeTools: this.config.activeTools as any,
         experimental_context: options.experimental_context || this.config.experimental_context,
-        prepareStep: this.config.prepareStep,
+        prepareStep: this.config.prepareStep as any,
         repairToolCall: this.config.repairToolCall,
         onStepStart: this.config.onStepStart,
         onStepFinish: this.config.onStepFinish,

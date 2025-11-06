@@ -2,7 +2,7 @@
 // Uses 'use step' directive for durable execution
 // See: https://v6.ai-sdk.dev/docs/agents/workflows
 
-import { generateObject } from 'ai';
+import { generateObject, generateText } from 'ai';
 import { z } from 'zod';
 import type { StreamingStepOutput } from '../schemas/workflow-schemas';
 import { logEvent, logStepProgress } from '../lib/braintrust';
@@ -89,12 +89,19 @@ export async function evaluationStep(
     toolExecutionCount: input.executionResult.toolExecutions?.length || 0,
     textLength: input.executionResult.fullText?.length || 0,
     finishReason: input.executionResult.finishReason,
+    hasModel: !!input.model,
+    hasPlan: !!input.plan,
+    planSteps: input.plan?.steps?.length || 0,
   });
 
   logEvent('evaluation_step_start', {
     tool_execution_count: input.executionResult.toolExecutions?.length || 0,
     text_length: input.executionResult.fullText?.length || 0,
     finish_reason: input.executionResult.finishReason,
+    has_model: !!input.model,
+    has_plan: !!input.plan,
+    plan_steps: input.plan?.steps?.length || 0,
+    execution_result_keys: Object.keys(input.executionResult || {}),
   });
 
   try {
@@ -159,17 +166,59 @@ ${input.evaluationCriteria?.customCriteria || 'Standard quality criteria'}
 
 Provide a comprehensive evaluation of this execution.`;
 
+    evaluatorDebug.info('Calling generateObject for evaluation', {
+      modelType: typeof input.model,
+      hasSchema: !!EvaluationSchema,
+      promptLength: evaluationPrompt.length,
+      systemPromptLength: systemPrompt.length,
+    });
+
+    logEvent('evaluation_generate_object_start', {
+      model_type: typeof input.model,
+      prompt_length: evaluationPrompt.length,
+      system_prompt_length: systemPrompt.length,
+    });
+
     // Generate structured evaluation using AI SDK
+    // Using schemaName and schemaDescription for better LLM guidance
     const result = await generateObject({
       model: input.model,
       schema: EvaluationSchema,
+      schemaName: 'ExecutionEvaluation',
+      schemaDescription: 'Evaluation of browser automation execution quality and completeness',
       system: systemPrompt,
       prompt: evaluationPrompt,
       maxRetries: 2,
+      // Repair malformed JSON if needed
+      experimental_repairText: async ({ text, error }) => {
+        evaluatorDebug.warn('Attempting to repair malformed JSON', {
+          errorType: error?.constructor?.name,
+          textLength: text?.length,
+        });
+        
+        // Try adding closing braces if missing
+        if (text && !text.trim().endsWith('}')) {
+          return text + '}';
+        }
+        return text;
+      },
     });
 
     const duration = Date.now() - startTime;
     timer();
+
+    evaluatorDebug.info('generateObject completed successfully', {
+      hasResult: !!result,
+      hasObject: !!result?.object,
+      objectKeys: result?.object ? Object.keys(result.object) : [],
+      duration,
+    });
+
+    logEvent('evaluation_generate_object_success', {
+      has_result: !!result,
+      has_object: !!result?.object,
+      duration,
+    });
 
     evaluatorDebug.info('Evaluation completed', {
       quality: result.object.quality,
@@ -203,11 +252,51 @@ Provide a comprehensive evaluation of this execution.`;
     const duration = Date.now() - startTime;
     timer();
 
-    evaluatorDebug.error('Evaluation step failed', error);
+    const errorDetails = {
+      message: error?.message || String(error),
+      name: error?.name,
+      stack: error?.stack?.split('\n').slice(0, 3).join('\n'),
+      cause: error?.cause,
+      code: error?.code,
+      type: typeof error,
+      isAISDKError: error?.constructor?.name?.includes('AI'),
+      errorKeys: error ? Object.keys(error) : [],
+    };
+
+    evaluatorDebug.error('Evaluation step failed', errorDetails);
 
     logEvent('evaluation_step_error', {
-      error: error?.message || String(error),
+      error_message: errorDetails.message,
+      error_name: errorDetails.name,
+      error_type: errorDetails.type,
+      is_ai_sdk_error: errorDetails.isAISDKError,
+      error_code: errorDetails.code,
       duration,
+      input_has_model: !!input.model,
+      input_has_execution_result: !!input.executionResult,
+      execution_result_keys: input.executionResult ? Object.keys(input.executionResult) : [],
+    });
+
+    // Log detailed context for debugging
+    console.error('[EVALUATION-ERROR] Full error context:', JSON.stringify({
+      error: errorDetails,
+      input: {
+        hasModel: !!input.model,
+        modelType: typeof input.model,
+        hasExecutionResult: !!input.executionResult,
+        executionResultKeys: input.executionResult ? Object.keys(input.executionResult) : [],
+        toolExecutionCount: input.executionResult?.toolExecutions?.length || 0,
+        hasPlan: !!input.plan,
+        planSteps: input.plan?.steps?.length || 0,
+      },
+    }, null, 2));
+
+    // Also log to evaluator debug
+    evaluatorDebug.error('[EVALUATION-ERROR] Detailed error:', {
+      message: errorDetails.message,
+      name: errorDetails.name,
+      stack: errorDetails.stack,
+      isAISDKError: errorDetails.isAISDKError,
     });
 
     // Return a fallback evaluation on error
@@ -216,9 +305,17 @@ Provide a comprehensive evaluation of this execution.`;
       score: 0.5,
       completeness: 0.5,
       correctness: 0.5,
-      issues: [`Evaluation failed: ${error?.message || String(error)}`],
+      issues: [
+        `Evaluation failed: ${errorDetails.message}`,
+        `Error type: ${errorDetails.name || errorDetails.type}`,
+        errorDetails.isAISDKError ? 'AI SDK error detected' : 'Non-AI SDK error',
+      ],
       successes: [],
-      recommendations: ['Retry evaluation with different model or criteria'],
+      recommendations: [
+        'Retry evaluation with different model or criteria',
+        'Check model configuration and API keys',
+        'Verify execution result structure',
+      ],
       shouldRetry: false,
       shouldProceed: true, // Proceed despite evaluation failure
       duration,

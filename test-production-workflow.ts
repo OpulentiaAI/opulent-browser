@@ -5,10 +5,10 @@
 // Enhanced with telemetry for summarization content analysis
 
 import { browserAutomationWorkflow } from './workflows/browser-automation-workflow.ts';
-import type { BrowserAutomationWorkflowInput, Message, PageContext } from './types.ts';
+import type { BrowserAutomationWorkflowInput, Message } from './types.ts';
 
 // Mock Chrome APIs for Node.js environment
-(globalThis as any).chrome = {
+(globalThis as Record<string, unknown>).chrome = {
   runtime: {
     getURL: () => 'chrome-extension://test/',
   }
@@ -47,6 +47,12 @@ interface TelemetryData {
     final: string;
     navigationSteps: string[];
   };
+  approvals: {
+    toolName: string;
+    params: Record<string, unknown>;
+    timestamp: string;
+    approved: boolean;
+  }[];
 }
 
 async function testProductionWorkflow() {
@@ -113,11 +119,12 @@ async function testProductionWorkflow() {
       final: '',
       navigationSteps: [],
     },
+    approvals: [],
   };
 
   // Mock context for testing with telemetry hooks
   const mockContext = {
-    executeTool: async (toolName: string, params: any) => {
+    executeTool: async (toolName: string, params: Record<string, unknown>) => {
       console.log(`🔧 [TOOL] ${toolName}:`, params);
       telemetry.execution.toolCallsCount++;
 
@@ -145,7 +152,7 @@ async function testProductionWorkflow() {
               viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0, devicePixelRatio: 1 },
             }
           };
-        case 'getPageContext':
+        case 'getPageContext': {
           const finalUrl = 'https://www.espn.com';
           telemetry.pageContexts.final = finalUrl;
           return {
@@ -159,11 +166,12 @@ async function testProductionWorkflow() {
             metadata: {},
             viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0, devicePixelRatio: 1 },
           };
+        }
         default:
           return { success: true, url: 'https://www.espn.com' };
       }
     },
-    enrichToolResponse: async (res: any, toolName: string) => {
+    enrichToolResponse: async (res: Record<string, unknown>, _toolName: string) => {
       return {
         success: res?.success !== false,
         url: res?.url || 'https://www.espn.com',
@@ -184,7 +192,7 @@ async function testProductionWorkflow() {
         viewport: { width: 1280, height: 720, scrollX: 0, scrollY: 0, devicePixelRatio: 1 },
       };
     },
-    updateLastMessage: (updater: (msg: Message) => Message) => {
+    updateLastMessage: (_updater: (msg: Message) => Message) => {
       console.log('📝 [UI] Updating last message');
     },
     pushMessage: (msg: Message) => {
@@ -199,6 +207,17 @@ async function testProductionWorkflow() {
     abortSignal: undefined,
     retryTask: (taskId: string) => console.log(`🔄 [TASK] Retrying ${taskId}`),
     cancelTask: (taskId: string) => console.log(`❌ [TASK] Cancelling ${taskId}`),
+    onApprovalRequired: async (toolName: string, params: Record<string, unknown>) => {
+      console.log(`🔐 [TEST] Approval requested for ${toolName}:`, params);
+      telemetry.approvals.push({
+        toolName,
+        params,
+        timestamp: new Date().toISOString(),
+        approved: true // Auto-approve for testing
+      });
+      console.log(`🔐 [TEST] Auto-approving ${toolName} for test`);
+      return Promise.resolve(true);
+    },
   };
 
   const startTime = Date.now();
@@ -219,6 +238,15 @@ async function testProductionWorkflow() {
 
     console.log(`\n✅ Workflow completed in ${duration}ms`);
     console.log('📊 Results:');
+
+    // Approval flow telemetry analysis
+    console.log('🔐 Approval Flow Analysis:');
+    console.log(`   - Total approval requests: ${telemetry.approvals.length}`);
+    console.log(`   - Approved requests: ${telemetry.approvals.filter(a => a.approved).length}`);
+    console.log(`   - Rejected requests: ${telemetry.approvals.filter(a => !a.approved).length}`);
+    if (telemetry.approvals.length > 0) {
+      console.log('   - Tools requiring approval:', telemetry.approvals.map(a => a.toolName).join(', '));
+    }
 
     // Enhanced summarization analysis with telemetry
     if (result.summarization?.success) {
@@ -302,15 +330,16 @@ async function testProductionWorkflow() {
     telemetry.execution.success = false;
     
     // Check for authentication errors in catch block too
-    const authError = error?.message?.includes('401') || 
-                     error?.message?.toLowerCase().includes('auth') || 
-                     error?.message?.toLowerCase().includes('unauthorized') ||
-                     error?.message?.toLowerCase().includes('credentials');
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const authError = errorMessage.includes('401') || 
+                     errorMessage.toLowerCase().includes('auth') || 
+                     errorMessage.toLowerCase().includes('unauthorized') ||
+                     errorMessage.toLowerCase().includes('credentials');
     
     if (authError) {
       console.log('❌ AUTHENTICATION ERROR DETECTED:');
-      console.log(`   Error: ${error.message}`);
-      telemetry.execution.authError = error.message;
+      console.log(`   Error: ${errorMessage}`);
+      telemetry.execution.authError = errorMessage;
     } else {
       console.log(`\n❌ Workflow failed after ${duration}ms:`, error);
     }

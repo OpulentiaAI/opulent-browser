@@ -1,12 +1,12 @@
 {
-  "timestamp": "2025-11-05T19:10:17.706Z",
-  "testId": "telemetry-test-1762369817706",
+  "timestamp": "2025-11-05T19:07:30.901Z",
+  "testId": "telemetry-test-1762369650901",
   "config": {
     "model": "openai/gpt-4o-mini",
     "provider": "openrouter"
   },
   "execution": {
-    "totalDuration": 2,
+    "totalDuration": 1,
     "planningDuration": 0,
     "executionDuration": 0,
     "summarizationDuration": 0,

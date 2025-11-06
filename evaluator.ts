@@ -45,17 +45,15 @@ export async function evaluateYouResults(
     });
     model = client.chatModel(opts.model || 'deepseek-ai/deepseek-r1');
   } else if (opts.provider === 'openrouter') {
-    const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
-    const client = createOpenAICompatible({
-      name: 'openrouter',
-      baseURL: 'https://openrouter.ai/api/v1',
+    const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
+    const client = createOpenRouter({
+      apiKey: opts.apiKey,
       headers: {
         'HTTP-Referer': 'https://opulentia.ai',
         'X-Title': 'Opulent Browser',
       },
-      apiKey: opts.apiKey,
     });
-    model = client.chatModel(opts.model || 'minimax/minimax-m2');
+    model = client.chat(opts.model || 'minimax/minimax-m2');
   } else {
     const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
     const client = createGoogleGenerativeAI({ apiKey: opts.apiKey });

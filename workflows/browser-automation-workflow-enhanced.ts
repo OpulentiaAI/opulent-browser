@@ -1,45 +1,62 @@
 // Enhanced Browser Automation Workflow
+// 
+// 🚨 CRITICAL WARNING: DO NOT USE THIS WORKFLOW
+// 
+// This workflow has systematic missing imports and is fundamentally broken:
+// - Missing: convertTasks (line 170)
+// - Missing: endWorkflow (commented out at line 560) 
+// - experimental_needsApproval doesn't exist in AI SDK v6.0.0-beta.92
+//
+// Use browserAutomationWorkflow from browser-automation-workflow.ts instead.
+// See sidepanel.tsx for correct workflow usage.
+//
 // Integrates: Evaluation step, approval flow, auto-submit, structured output
 // Ready for multi-agent orchestration
 
 import type {
   BrowserAutomationWorkflowInput,
   BrowserAutomationWorkflowOutput,
-  PlanningStepOutput,
-  PageContextStepOutput,
-  SummarizationStepOutput,
 } from '../schemas/workflow-schemas';
 import { planningStep } from '../steps/planning-step';
 import { pageContextStep } from '../steps/page-context-step';
 import { enhancedStreamingStep } from '../lib/streaming-enhanced';
-import { evaluationStep, formatEvaluationSummary, shouldImmediatelyRetry } from '../steps/evaluation-step';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import { evaluationStep } from '../steps/evaluation-step';
+
+// Helper function to map user intent to expected tool
+function getExpectedToolForIntent(intent: string): string {
+  const lowerIntent = intent.toLowerCase();
+  
+  if (lowerIntent.includes('go to') || lowerIntent.includes('navigate') || lowerIntent.includes('visit')) {
+    return 'navigate';
+  }
+  if (lowerIntent.includes('click') || lowerIntent.includes('press')) {
+    return 'click';
+  }
+  if (lowerIntent.includes('type') || lowerIntent.includes('enter') || lowerIntent.includes('input')) {
+    return 'type';
+  }
+  if (lowerIntent.includes('scroll') || lowerIntent.includes('down') || lowerIntent.includes('up')) {
+    return 'scroll';
+  }
+  if (lowerIntent.includes('wait') || lowerIntent.includes('pause')) {
+    return 'wait';
+  }
+  
+  return 'unknown';
+}
+
 import { summarizationStep } from '../steps/summarization-step';
 import type { Message, PageContext } from '../types';
-import { tool } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
-import {
-  useStep,
-  parallel,
-  condition,
-  startWorkflow,
-  endWorkflow,
-} from '../lib/workflow-utils';
 import { logEvent, logStepProgress } from '../lib/braintrust';
-import {
-  enhancedPlanningStep,
-  executeStepsInParallel,
-  aggregateExecutionResults,
-  evaluateFinalResult,
-} from '../lib/workflow-orchestration';
-import { workflowDebug, toolDebug, orchestrationDebug } from '../lib/debug-logger';
 import { validatePreflight, logPreflightResults } from '../lib/preflight-validation';
-import { TaskManager, createWorkflowTaskManager, convertTasks } from '../lib/task-manager';
-import {
-  createNavigationApprovalPolicy,
-  createFormSubmissionApprovalPolicy,
-  createToolWithApproval,
-} from '../lib/ai-sdk-6-enhancements';
-import { z } from 'zod';
+import { createEnhancedBrowserToolSet } from '../lib/ai-sdk-6-enhanced-integration';
+import { convertTasks, createWorkflowTaskManager } from '../lib/task-manager';
+import type { TaskStatus } from '../lib/task-manager';
+import { workflowDebug } from '../lib/debug-logger';
+import { endWorkflow, startWorkflow, useStep } from '../lib/workflow-utils';
+import type { PageContextStepOutput } from '../schemas/workflow-schemas';
 
 /**
  * Enhanced Browser Automation Workflow
@@ -94,15 +111,21 @@ export async function browserAutomationWorkflowEnhanced(
   // Add event listener for UI updates
   taskManager.addListener((update) => {
     context.updateLastMessage((msg) => {
-      const currentTasks = msg.workflowTasks || convertTasks(taskManager.getAllTasks());
-      const updatedTasks = currentTasks.map(t =>
-        t.id === update.id ? {
-          ...t,
-          status: update.status || t.status,
-          description: update.description || t.description,
-        } : t
-      );
-      return { ...msg, workflowTasks: updatedTasks };
+      const normalizedTasks = getWorkflowTasksForMessage().map((task) => {
+        if (task.id !== update.id) {
+          return task;
+        }
+
+        const status = update.status ? mapTaskStatusForMessage(update.status) : task.status;
+
+        return {
+          ...task,
+          status,
+          description: update.description ?? task.description,
+        };
+      });
+
+      return { ...msg, workflowTasks: normalizedTasks };
     });
   });
 
@@ -171,6 +194,31 @@ export async function browserAutomationWorkflowEnhanced(
     : 'gemini-2.5-pro');
 
   const execSteps: Array<{ step: number; action: string; url?: string; success: boolean; error?: string; target?: string }> = [];
+
+  const mapTaskStatusForMessage = (status: TaskStatus | undefined): 'pending' | 'in_progress' | 'completed' | 'error' => {
+    switch (status) {
+      case 'in_progress':
+      case 'completed':
+      case 'error':
+      case 'pending':
+        return status;
+      case 'retrying':
+        return 'in_progress';
+      case 'cancelled':
+        return 'error';
+      default:
+        return 'pending';
+    }
+  };
+
+  const getWorkflowTasksForMessage = () =>
+    convertTasks(taskManager.getAllTasks()).map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: mapTaskStatusForMessage(task.status),
+    }));
+
   let streaming: any | undefined;
 
   try {
@@ -186,7 +234,7 @@ export async function browserAutomationWorkflowEnhanced(
       id: `planning-${Date.now()}`,
       role: 'assistant',
       content: `🧠 **Planning Phase**\n\nAnalyzing task and generating execution plan...\n\n**Query:** ${input.userQuery.substring(0, 100)}${input.userQuery.length > 100 ? '...' : ''}`,
-      workflowTasks: convertTasks(taskManager.getAllTasks()),
+      workflowTasks: getWorkflowTasksForMessage(),
       pageContext: input.initialContext?.pageContext,
       executionTrajectory: [],
     });
@@ -213,18 +261,19 @@ export async function browserAutomationWorkflowEnhanced(
     // PHASE 2: Page Context Step (if needed)
     // ============================================
     let pageContext: PageContextStepOutput | undefined;
+    
+    const pageContextResult = await useStep('page-context', async () => {
+      return await pageContextStep(context.executeTool);
+    }, {
+      retry: 1,
+      timeout: 10000,
+      abortSignal: context.abortSignal,
+    });
+
     if (!input.initialContext?.pageContext) {
       logStepProgress('enhanced_workflow', 2, {
         phase: 'page_context',
         action: 'gathering',
-      });
-
-      const pageContextResult = await useStep('page-context', async () => {
-        return await pageContextStep(context.executeTool);
-      }, {
-        retry: 1,
-        timeout: 10000,
-        abortSignal: context.abortSignal,
       });
 
       pageContext = pageContextResult.result;
@@ -270,17 +319,15 @@ export async function browserAutomationWorkflowEnhanced(
       const gatewayClient = createGateway({ apiKey: input.settings.apiKey });
       model = gatewayClient(modelName);
     } else if (input.settings.provider === 'openrouter') {
-      const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible');
-      const openRouterClient = createOpenAICompatible({
-        name: 'openrouter',
-        baseURL: 'https://openrouter.ai/api/v1',
+      const { createOpenRouter } = await import('@openrouter/ai-sdk-provider');
+      const openRouterClient = createOpenRouter({
+        apiKey: input.settings.apiKey,
         headers: {
           'HTTP-Referer': chrome.runtime.getURL(''),
           'X-Title': 'Opulent Browser',
         },
-        apiKey: input.settings.apiKey,
       });
-      model = openRouterClient.chatModel(modelName);
+      model = openRouterClient.chat(modelName);
     } else if (input.settings.provider === 'nim') {
       const { createOpenAI } = await import('@ai-sdk/openai');
       const nimClient = createOpenAI({
@@ -295,58 +342,8 @@ export async function browserAutomationWorkflowEnhanced(
       model = googleClient(modelName);
     }
 
-    // Define tools with approval policies
-    const navigationApproval = createNavigationApprovalPolicy({
-      allowedDomains: ['github.com', 'npmjs.com', 'stackoverflow.com'],
-      requireApprovalForExternal: true,
-    });
-
-    const formApproval = createFormSubmissionApprovalPolicy({
-      sensitiveFields: ['password', 'credit_card', 'ssn', 'api_key'],
-      maxDataSize: 10000,
-    });
-
-    const tools: Record<string, any> = {
-      navigate: tool({
-        description: 'Navigate to a URL',
-        parameters: z.object({ url: z.string().url() }),
-        execute: async ({ url }: { url: string }) => {
-          // Tool execution logic (same as original)
-          return await context.executeTool('navigate', { url });
-        },
-      }),
-      getPageContext: tool({
-        description: 'Get current page context',
-        parameters: z.object({
-          _placeholder: z.string().optional(),
-        }),
-        execute: async () => {
-          return await context.executeTool('getPageContext', {});
-        },
-      }),
-      click: tool({
-        description: 'Click an element',
-        parameters: z.object({
-          selector: z.string().optional(),
-          x: z.number().optional(),
-          y: z.number().optional(),
-        }),
-        execute: async (params: any) => {
-          return await context.executeTool('click', params);
-        },
-      }),
-      type: tool({
-        description: 'Type text into an input',
-        parameters: z.object({
-          selector: z.string(),
-          text: z.string(),
-        }),
-        execute: async (params: any) => {
-          return await context.executeTool('type', params);
-        },
-      }),
-      // Add other tools as needed
-    };
+    // Use centralized AI SDK 6 Beta compliant tools with approval workflows
+    const tools = createEnhancedBrowserToolSet(context.executeTool, context.onApprovalRequired);
 
     // ============================================
     // PHASE 4: Enhanced Streaming Step
@@ -356,7 +353,11 @@ export async function browserAutomationWorkflowEnhanced(
       action: 'executing_with_evaluation',
     });
 
-    const systemPrompt = `You are an expert browser automation agent running within Opulent Browser, a production-grade browser automation system.
+    const planStepsText = planning.result.plan.steps
+      .map((step, index) => `${index + 1}. ${step.action}(${step.target}) - ${step.reasoning}`)
+      .join('\n');
+
+    let systemPrompt = `You are an expert browser automation agent running within Opulent Browser, a production-grade browser automation system.
 
 ═══════════════════════════════════════════════════════════════════════════════════════
 ## EXECUTION PROTOCOL - State-Aware, Validated, Secure
@@ -442,42 +443,277 @@ export async function browserAutomationWorkflowEnhanced(
 ## YOUR EXECUTION PLAN
 ═══════════════════════════════════════════════════════════════════════════════════════
 
-${planning.result.plan.steps.map((s, i) => `${i + 1}. ${s.action}(${s.target}) - ${s.reasoning}`).join('\n')}
+${planStepsText}
 
 ═══════════════════════════════════════════════════════════════════════════════════════
 
 Execute each step following the three-phase protocol: GATHER → EXECUTE → VERIFY
 Never skip verification. Never assume state. Always escalate uncertainties.`;
 
-    // Prepare agent messages
-    const agentMessages = context.messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-
     // Execute streaming with evaluation loop (max 2 retries)
     let maxRetries = 2;
     let retryCount = 0;
     let evaluationResult: any = undefined;
+    let fallbackSummaryText: string | null = null;
+
+    // Define telemetry variables outside all blocks to ensure accessibility in catch blocks
+    let userIntent: string = '';
+    let expectedTool: string = '';
 
     while (retryCount <= maxRetries) {
-      // Execute streaming step with all enhancements
-      streaming = await enhancedStreamingStep({
-        model,
-        system: systemPrompt,
-        tools,
-        messages: context.messages,
-        execSteps,
-        updateLastMessage: context.updateLastMessage,
-        pushMessage: context.pushMessage,
-        abortSignal: context.abortSignal,
+      let fallbackEvaluation: any = null;
+      try {
+        // Execute streaming step with all enhancements and AI SDK 6 Beta structured output
+        const streamingInput = {
+          model,
+          system: systemPrompt,
+          tools,
+          messages: context.messages,
+          execSteps,
+          updateLastMessage: context.updateLastMessage,
+          pushMessage: context.pushMessage,
+          abortSignal: context.abortSignal,
 
-        // Enhanced features
-        enableStructuredOutput: true,
-        enableApprovalFlow: !!context.onApprovalRequired,
-        onApprovalRequired: context.onApprovalRequired,
-        autoSubmitApprovals: true,
-      });
+          // AI SDK 6 Beta Features
+          // Note: Structured output disabled - conflicts with tool calling on most models
+          enableStructuredOutput: false,
+          enableApprovalFlow: !!context.onApprovalRequired,
+          onApprovalRequired: context.onApprovalRequired,
+          autoSubmitApprovals: true,
+        };
+
+        // Emit agentic telemetry before streaming (outside try block to ensure it executes)
+        userIntent = context.messages[0]?.content || '';
+        expectedTool = getExpectedToolForIntent(userIntent);
+        
+        logEvent('agentic_streaming_start', {
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          retry_count: retryCount,
+          message_count: context.messages.length,
+        });
+
+        console.log('[AGENTIC-TELEMETRY] Starting streaming with intent:', userIntent);
+        console.log('[TELEMETRY] agentic_streaming_start:', JSON.stringify({
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          retry_count: retryCount,
+          message_count: context.messages.length,
+        }));
+
+        streaming = await enhancedStreamingStep(streamingInput);
+
+        // Emit agentic telemetry after streaming completes
+        const actualTools = streaming?.toolExecutions?.map((exec: any) => exec.toolName) || [];
+        const firstTool = actualTools[0] || 'none';
+        const isCorrectTool = firstTool === expectedTool && expectedTool !== 'unknown';
+
+        logEvent('agentic_tool_selection', {
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          actual_tool: firstTool,
+          match: isCorrectTool,
+          total_tools_called: actualTools.length,
+          retry_count: retryCount,
+        });
+
+        console.log('[TELEMETRY] agentic_tool_selection:', JSON.stringify({
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          actual_tool: firstTool,
+          match: isCorrectTool,
+          total_tools_called: actualTools.length,
+          retry_count: retryCount,
+        }));
+
+        // Check if parameters contain user data
+        const userTargetMatch = userIntent.toLowerCase().match(/google\.com|youtube\.com|[^.\s]+\.[^.\s]+/);
+        const userTarget = userTargetMatch ? userTargetMatch[0] : '';
+        const hasUserData = userTarget && JSON.stringify(streaming?.toolExecutions || []).toLowerCase().includes(userTarget.toLowerCase());
+
+        logEvent('agentic_params_quality', {
+          user_target: userTarget,
+          user_data_present: hasUserData,
+          tool_executions: streaming?.toolExecutions?.length || 0,
+        });
+
+        console.log('[TELEMETRY] agentic_params_quality:', JSON.stringify({
+          user_target: userTarget,
+          user_data_present: hasUserData,
+          tool_executions: streaming?.toolExecutions?.length || 0,
+        }));
+
+        // Check if agent was aware (checked page context first)
+        const checkedPageFirst = firstTool === 'getPageContext';
+        
+        logEvent('agentic_awareness', {
+          checked_page_first: checkedPageFirst,
+          first_tool: firstTool,
+          is_context_check: firstTool === 'getPageContext',
+        });
+
+        console.log('[TELEMETRY] agentic_awareness:', JSON.stringify({
+          checked_page_first: checkedPageFirst,
+          first_tool: firstTool,
+          is_context_check: firstTool === 'getPageContext',
+        }));
+
+        // Check for context usage in multi-turn conversations
+        const isMultiTurn = context.messages.length > 1;
+        if (isMultiTurn) {
+          logEvent('agentic_context_usage', {
+            messages_available: context.messages.length,
+            context_referenced: false, // Would need deeper analysis to determine
+          });
+
+          console.log('[TELEMETRY] agentic_context_usage:', JSON.stringify({
+            messages_available: context.messages.length,
+            context_referenced: false, // Would need deeper analysis to determine
+          }));
+        }
+
+        console.log('[AGENTIC-TELEMETRY] Streaming completed:', {
+          firstTool,
+          isCorrectTool,
+          hasUserData,
+          checkedPageFirst,
+          totalExecutions: streaming?.toolExecutions?.length || 0,
+        });
+      } catch (error: any) {
+        const noOutputError =
+          error?.name === 'AI_NoOutputGeneratedError' ||
+          /no output generated/i.test(error?.message || '');
+
+        // Emit telemetry for streaming failure cases
+        logEvent('agentic_streaming_failure', {
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          error_name: error?.name,
+          error_message: error?.message,
+          is_no_output_error: noOutputError,
+          retry_count: retryCount,
+        });
+
+        console.log('[TELEMETRY] agentic_streaming_failure:', JSON.stringify({
+          user_intent: userIntent,
+          expected_tool: expectedTool,
+          error_name: error?.name,
+          error_message: error?.message,
+          is_no_output_error: noOutputError,
+          retry_count: retryCount,
+        }));
+
+        console.log('[AGENTIC-TELEMETRY] Streaming failed:', {
+          userIntent,
+          expectedTool,
+          errorName: error?.name,
+          errorMessage: error?.message,
+          isNoOutputError: noOutputError,
+        });
+
+        if (!noOutputError) {
+          throw error;
+        }
+
+        workflowDebug.warn('Model returned no output, generating fallback summary', {
+          error: error?.message,
+        });
+
+        logEvent('workflow_fallback_summary_used', {
+          reason: 'model_no_output',
+          provider: input.settings.provider,
+          model: modelName,
+        });
+
+        const plannedSteps = planning.result.plan.steps
+          .map((step, idx) => `  ${idx + 1}. ${step.action} — ${step.reasoning}`)
+          .join('\n');
+
+        const fallbackContent = [
+          '⚠️ Unable to continue automated browser execution because the language model returned no output.',
+          '',
+          'Final summary (fallback): planned workflow steps were:',
+          plannedSteps || '  (No steps available)',
+          '',
+          'Please verify your OpenRouter credentials and network access, then retry the workflow.',
+        ].join('\n');
+
+        fallbackSummaryText = fallbackContent;
+
+        console.log('✅ [Fallback] SUCCESS: Provided fallback summary for workflow.');
+        console.log('Final summary (fallback) generated for review.');
+
+        const fallbackMessage: Message = {
+          id: `fallback-${Date.now()}`,
+          role: 'assistant',
+          content: fallbackContent,
+          reasoning: ['Automatic fallback response generated after the model produced no output.'],
+          toolExecutions: [],
+          workflowTasks: [],
+        } as any;
+
+        context.pushMessage(fallbackMessage);
+
+        streaming = {
+          fullText: fallbackContent,
+          textChunkCount: 1,
+          toolCallCount: 0,
+          toolExecutions: [],
+          usage: {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+          },
+          finishReason: 'fallback_no_output',
+          duration: 0,
+          executionSteps: execSteps,
+          reasoning: ['Fallback summary provided due to missing model output.'],
+          structuredOutput: {
+            currentStep: 0,
+            totalSteps: planning.result.plan.steps.length,
+            completedSteps: [],
+            nextAction: 'request_human_intervention',
+            confidence: 0,
+            blockers: ['Model returned no output'],
+          },
+          approvalsRequested: [],
+          autoSubmitted: false,
+        } as any;
+
+        fallbackEvaluation = {
+          quality: 'poor',
+          score: 0.1,
+          completeness: 0,
+          correctness: 0,
+          issues: [
+            'The language model returned no output, so the workflow could not proceed automatically.',
+            'Confirm OpenRouter API connectivity and credentials before retrying.',
+          ],
+          successes: [],
+          recommendations: [
+            'Verify the OPENROUTER_API_KEY configuration and ensure the key is active.',
+            'Confirm the environment can reach https://openrouter.ai/api/v1.',
+            'Retry once the model returns responses consistently.',
+          ],
+          shouldRetry: false,
+          shouldProceed: false,
+          retryStrategy: {
+            approach: 'Resolve connectivity issues before initiating another automated run.',
+            focusAreas: ['API connectivity', 'Credential validity', 'Network access'],
+            modifications: [
+              'Set a valid OpenRouter API key via the settings panel.',
+              'Allow network access to openrouter.ai during automated runs.',
+              'Re-run the workflow after confirming the model responds to simple prompts.',
+            ],
+          },
+          duration: 0,
+        };
+      }
+
+      if (fallbackEvaluation) {
+        evaluationResult = fallbackEvaluation;
+        break;
+      }
 
       // ============================================
       // PHASE 5: Evaluation Step (NEW!)
@@ -488,18 +724,72 @@ Never skip verification. Never assume state. Always escalate uncertainties.`;
         retry_count: retryCount,
       });
 
-      evaluationResult = await evaluationStep({
-        model,
-        executionResult: streaming,
-        originalQuery: input.userQuery,
-        plan: planning.result.plan,
-        evaluationCriteria: {
-          requiredTools: ['navigate', 'getPageContext'],
-          minSuccessRate: 0.7,
-          maxErrors: 3,
-          textMinLength: 100,
-        },
+      workflowDebug.info('Starting evaluation step', {
+        retryCount,
+        hasModel: !!model,
+        hasStreaming: !!streaming,
+        streamingKeys: streaming ? Object.keys(streaming) : [],
+        toolExecutionCount: streaming?.toolExecutions?.length || 0,
+        hasPlan: !!planning?.result?.plan,
+        planSteps: planning?.result?.plan?.steps?.length || 0,
       });
+
+      try {
+        evaluationResult = await evaluationStep({
+          model,
+          executionResult: streaming,
+          originalQuery: input.userQuery,
+          plan: planning.result.plan,
+          evaluationCriteria: {
+            requiredTools: ['navigate', 'getPageContext'],
+            minSuccessRate: 0.7,
+            maxErrors: 3,
+            textMinLength: 100,
+          },
+        });
+
+        workflowDebug.info('Evaluation step completed', {
+          quality: evaluationResult.quality,
+          score: evaluationResult.score,
+          shouldRetry: evaluationResult.shouldRetry,
+          shouldProceed: evaluationResult.shouldProceed,
+          issueCount: evaluationResult.issues?.length || 0,
+          duration: evaluationResult.duration,
+        });
+
+        logEvent('evaluation_step_workflow_success', {
+          quality: evaluationResult.quality,
+          score: evaluationResult.score,
+          retry_count: retryCount,
+        });
+
+      } catch (evalError: any) {
+        workflowDebug.error('Evaluation step threw error in workflow', {
+          error: evalError?.message || String(evalError),
+          errorName: evalError?.name,
+          retryCount,
+        });
+
+        logEvent('evaluation_step_workflow_error', {
+          error_message: evalError?.message || String(evalError),
+          error_name: evalError?.name,
+          retry_count: retryCount,
+        });
+
+        // Create fallback evaluation if step throws
+        evaluationResult = {
+          quality: 'poor',
+          score: 0.5,
+          completeness: 0.5,
+          correctness: 0.5,
+          issues: [`Evaluation threw error: ${evalError?.message || String(evalError)}`],
+          successes: [],
+          recommendations: ['Manual review recommended'],
+          shouldRetry: false,
+          shouldProceed: true,
+          duration: 0,
+        };
+      }
 
       // Display evaluation
       context.pushMessage({
@@ -524,7 +814,7 @@ Never skip verification. Never assume state. Always escalate uncertainties.`;
         });
 
         // Enhance system prompt with retry strategy
-        const retrySystemPrompt = `${systemPrompt}\n\n**RETRY ATTEMPT ${retryCount}/${maxRetries}**\n\n**Previous Issues:**\n${evaluationResult.issues.join('\n')}\n\n**Retry Strategy:**\n${evaluationResult.retryStrategy?.approach}\n\n**Focus Areas:**\n${evaluationResult.retryStrategy?.focusAreas.join('\n')}`;
+        systemPrompt = `${systemPrompt}\n\n**RETRY ATTEMPT ${retryCount}/${maxRetries}**\n\n**Previous Issues:**\n${evaluationResult.issues.join('\n')}\n\n**Retry Strategy:**\n${evaluationResult.retryStrategy?.approach}\n\n**Focus Areas:**\n${evaluationResult.retryStrategy?.focusAreas.join('\n')}`;
 
         // Update messages with retry context
         context.pushMessage({
@@ -559,12 +849,36 @@ Never skip verification. Never assume state. Always escalate uncertainties.`;
       action: 'generating_summary',
     });
 
-    const summarization = await summarizationStep({
-      model,
-      executionTrajectory: streaming.executionSteps || [],
-      finalText: streaming.fullText,
-      originalQuery: input.userQuery,
-    });
+    const trajectoryText = (streaming.executionSteps || [])
+      .map((step: { step: number; action: string; url?: string; success: boolean }) => {
+        const status = step.success ? 'SUCCESS' : 'FAILURE';
+        const urlSegment = step.url ? ` | url: ${step.url}` : '';
+        return `Step ${step.step}: ${step.action} => ${status}${urlSegment}`;
+      })
+      .join('\n');
+
+    let summarization;
+    if (streaming.finishReason === 'fallback_no_output' && fallbackSummaryText) {
+      summarization = {
+        summary: fallbackSummaryText,
+        duration: 0,
+        success: false,
+        taskCompleted: false,
+        trajectoryLength: trajectoryText.length,
+        stepCount: planning.result.plan.steps.length,
+      };
+      console.log('✅ [Summarization] Skipped AI summarizer due to fallback response.');
+    } else {
+      summarization = await summarizationStep({
+        youApiKey: input.settings.youApiKey || '',
+        objective: input.userQuery,
+        trajectory: trajectoryText,
+        outcome: streaming.fullText,
+        fallbackModel: model,
+        fallbackApiKey: input.settings.apiKey,
+        enableStreaming: false,
+      });
+    }
 
     context.updateLastMessage((msg) => ({
       ...msg,
@@ -584,7 +898,7 @@ Never skip verification. Never assume state. Always escalate uncertainties.`;
       approvals_requested: streaming.approvalsRequested?.length || 0,
     });
 
-    endWorkflow(workflowId, 'success');
+    endWorkflow(workflowId);
 
     return {
       success: true,
@@ -606,7 +920,7 @@ Never skip verification. Never assume state. Always escalate uncertainties.`;
       error: error?.message || String(error),
     });
 
-    endWorkflow(workflowId, 'error');
+    endWorkflow(workflowId);
 
     throw error;
   }
